@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	stan "github.com/nats-io/go-nats-streaming"
 )
 
 type Entry struct {
@@ -22,18 +24,28 @@ type Response struct {
 }
 
 type apiserver struct {
+	Sc stan.Conn
 }
 
-func (apiserver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (a apiserver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
 	if r.Method == "POST" && r.RequestURI == "/api/submit" {
 		body, _ := ioutil.ReadAll(r.Body)
 		data := Entry{}
 		err := json.Unmarshal(body, &data)
 		if err != nil {
 			log.Printf("Err: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(Response{false, "invalid data submited"})
 		}
 
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		err = a.Sc.Publish(data.ID, body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(Response{false, "unable to publish"})
+		}
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{true, ""})
 	}
@@ -41,9 +53,16 @@ func (apiserver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	PORT := 8080
+	NATSURL := "nats://docker.local:4222"
 	fmt.Printf("Listening on %v\n", PORT)
+	// fmt.Println(stan.DefaultNatsURL)
 
-	api := apiserver{}
+	sc, err := stan.Connect("test-cluster", "api", stan.NatsURL(NATSURL))
+	if err != nil {
+		log.Printf("Err: %v\n", err)
+	}
+
+	api := apiserver{Sc: sc}
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
