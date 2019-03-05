@@ -53,11 +53,11 @@ func (a apiserver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	PORT := 8080
-	NATSURL := "nats://docker.local:4222"
+	URL := "nats://docker.local:4222"
 	fmt.Printf("Listening on %v\n", PORT)
 	// fmt.Println(stan.DefaultNatsURL)
 
-	sc, err := stan.Connect("test-cluster", "api", stan.NatsURL(NATSURL))
+	sc, err := stan.Connect("test-cluster", "api", stan.NatsURL(URL))
 	if err != nil {
 		log.Printf("Err: %v\n", err)
 	}
